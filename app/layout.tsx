@@ -8,10 +8,12 @@ const artchiveFont = Fraunces({
   weight: ["600", "700"],
 });
 
+const siteBaseUrl = (
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.floweralice.me/artchive"
+).replace(/\/?$/, "/");
+
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.floweralice.me/artchive"
-  ),
+  metadataBase: new URL(siteBaseUrl),
   title: "Artchive — Museum masterpieces into your brand's design language",
   description:
     "Find your perfect design identity from 500k+ works across the world's greatest museums.",
@@ -38,8 +40,11 @@ export const metadata: Metadata = {
     images: ["opengraph-image"],
   },
   icons: {
-    icon: [{ url: "icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "apple-icon.svg", type: "image/svg+xml", sizes: "180x180" }],
+    icon: [
+      { url: `${siteBaseUrl}icon`, type: "image/png", sizes: "32x32" },
+      { url: `${siteBaseUrl}icon.svg`, type: "image/svg+xml" },
+    ],
+    apple: [{ url: `${siteBaseUrl}apple-icon`, type: "image/png", sizes: "180x180" }],
   },
 };
 

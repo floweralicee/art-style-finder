@@ -33,12 +33,16 @@ export default async function OpenGraphImage() {
             width: '100%',
             height: '100%',
             objectFit: 'cover',
+            objectPosition: '50% 50%',
           }}
         />
         <div
           style={{
             position: 'absolute',
-            inset: 0,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -46,13 +50,15 @@ export default async function OpenGraphImage() {
         >
           <span
             style={{
+              display: 'flex',
               fontFamily: 'Fraunces',
-              fontSize: 112,
+              fontSize: 168,
               fontWeight: 700,
               letterSpacing: '-0.03em',
               color: '#1a1a1a',
               lineHeight: 1,
-              textShadow: '0 2px 24px rgba(249, 248, 245, 0.85), 0 0 2px rgba(249, 248, 245, 0.9)',
+              textShadow:
+                '0 1px 18px rgba(249, 248, 245, 0.75), 0 0 1px rgba(249, 248, 245, 0.8)',
             }}
           >
             Artchive.
