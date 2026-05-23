@@ -6,6 +6,7 @@ import { deriveDesignRec } from '@/lib/palette-utils';
 import { Artwork } from '@/lib/types';
 import CopyButton from './CopyButton';
 import posthog from 'posthog-js';
+import { withBasePath } from '@/lib/api-path';
 
 export interface WebsiteMatchData {
   score: number;
@@ -118,7 +119,7 @@ export default function StylePanel({
     setPaletteLoading(true);
     setExtractedColors(null);
 
-    fetch('/api/extract-palette', {
+    fetch(withBasePath('/api/extract-palette'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageUrl: artworkImageUrl }),

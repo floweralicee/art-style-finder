@@ -7,6 +7,7 @@ import { Artwork } from '@/lib/types';
 import CopyButton from './CopyButton';
 import type { WebsiteMatchData } from './StylePanel';
 import posthog from 'posthog-js';
+import { withBasePath } from '@/lib/api-path';
 
 interface MatchResultModalProps {
   artwork: Artwork;
@@ -105,7 +106,7 @@ export default function MatchResultModal({
     setPaletteLoading(true);
     setExtractedColors(null);
 
-    fetch('/api/extract-palette', {
+    fetch(withBasePath('/api/extract-palette'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageUrl: artwork.image }),

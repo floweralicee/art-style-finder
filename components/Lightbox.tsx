@@ -5,6 +5,7 @@ import { Artwork } from '@/lib/types';
 import { MUSEUM_PALETTES, MUSEUMS } from '@/lib/museums';
 import CopyButton from './CopyButton';
 import posthog from 'posthog-js';
+import { withBasePath } from '@/lib/api-path';
 
 interface LightboxProps {
   artwork: Artwork;
@@ -32,7 +33,7 @@ export default function Lightbox({ artwork, onClose, onStyleClick }: LightboxPro
     setPaletteLoading(true);
     setExtractedColors(null);
 
-    fetch('/api/extract-palette', {
+    fetch(withBasePath('/api/extract-palette'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageUrl: artwork.image }),

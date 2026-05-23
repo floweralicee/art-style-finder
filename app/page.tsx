@@ -12,9 +12,10 @@ import FilterBar from '@/components/FilterBar';
 import MuseumTicker from '@/components/MuseumTicker';
 import WebsiteMatchModal from '@/components/WebsiteMatchModal';
 import posthog from 'posthog-js';
+import { withBasePath } from '@/lib/api-path';
 
 async function extractArtworkPalette(imageUrl: string): Promise<string[] | null> {
-  const res = await fetch('/api/extract-palette', {
+  const res = await fetch(withBasePath('/api/extract-palette'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageUrl }),
@@ -44,7 +45,7 @@ async function gatherMatchCandidates(
 
   let pageNum = 0;
   while (byId.size < targetCount && pageNum < 15) {
-    const res = await fetch(`/api/artworks?filter=${filter}&page=${pageNum}`);
+    const res = await fetch(withBasePath(`/api/artworks?filter=${filter}&page=${pageNum}`));
     const data = await res.json();
     const batch: Artwork[] = data.artworks ?? [];
     if (batch.length === 0) break;
@@ -86,7 +87,7 @@ export default function Home() {
     loadingRef.current = true;
     setLoading(true);
     try {
-      const res = await fetch(`/api/artworks?filter=${currentFilter}&page=${pageNum}`);
+      const res = await fetch(withBasePath(`/api/artworks?filter=${currentFilter}&page=${pageNum}`));
       const data = await res.json();
       if (append) {
         setArtworks(prev => {
@@ -211,7 +212,7 @@ export default function Home() {
     if (websiteColorsCacheRef.current?.url === url) {
       websiteColors = websiteColorsCacheRef.current.colors;
     } else {
-      const res = await fetch('/api/match-website', {
+      const res = await fetch(withBasePath('/api/match-website'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ websiteUrl: url }),

@@ -3,6 +3,9 @@ const basePath = '/artchive';
 
 const nextConfig = {
   basePath,
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'collectionapi.metmuseum.org' },
