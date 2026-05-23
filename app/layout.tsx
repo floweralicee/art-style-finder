@@ -38,8 +38,8 @@ export const metadata: Metadata = {
     images: ["opengraph-image"],
   },
   icons: {
-    icon: [{ url: "icon", type: "image/png", sizes: "32x32" }],
-    apple: [{ url: "apple-icon", type: "image/png", sizes: "180x180" }],
+    icon: [{ url: "icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "apple-icon.svg", type: "image/svg+xml", sizes: "180x180" }],
   },
 };
 

@@ -44,31 +44,19 @@ export default async function OpenGraphImage() {
             justifyContent: 'center',
           }}
         >
-          <div
+          <span
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '18px 36px',
-              borderRadius: 999,
-              background: 'rgba(249, 248, 245, 0.82)',
-              border: '2px solid rgba(26, 26, 26, 0.08)',
-              boxShadow: '0 18px 48px rgba(26, 26, 26, 0.14)',
+              fontFamily: 'Fraunces',
+              fontSize: 112,
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
+              color: '#1a1a1a',
+              lineHeight: 1,
+              textShadow: '0 2px 24px rgba(249, 248, 245, 0.85), 0 0 2px rgba(249, 248, 245, 0.9)',
             }}
           >
-            <span
-              style={{
-                fontFamily: 'Fraunces',
-                fontSize: 96,
-                fontWeight: 700,
-                letterSpacing: '-0.03em',
-                color: '#1a1a1a',
-                lineHeight: 1,
-              }}
-            >
-              Artchive.
-            </span>
-          </div>
+            Artchive.
+          </span>
         </div>
       </div>
     ),
