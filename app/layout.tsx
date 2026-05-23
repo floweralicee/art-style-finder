@@ -9,8 +9,34 @@ const artchiveFont = Fraunces({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.floweralice.me/artchive"
+  ),
   title: "Artchive — Museum masterpieces into your brand's design language",
-  description: "Find your perfect design identity from 500k+ works across the world's greatest museums.",
+  description:
+    "Find your perfect design identity from 500k+ works across the world's greatest museums.",
+  openGraph: {
+    title: "Artchive — Museum masterpieces into your brand's design language",
+    description:
+      "Find your perfect design identity from 500k+ works across the world's greatest museums.",
+    siteName: "Artchive",
+    type: "website",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Artchive — museum gallery preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Artchive — Museum masterpieces into your brand's design language",
+    description:
+      "Find your perfect design identity from 500k+ works across the world's greatest museums.",
+    images: ["/opengraph-image"],
+  },
 };
 
 export default function RootLayout({
