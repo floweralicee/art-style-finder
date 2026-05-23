@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Artwork } from '@/lib/types';
-import { MUSEUMS } from '@/lib/museums';
 
 interface ArtCardProps {
   artwork: Artwork;
@@ -11,7 +10,6 @@ interface ArtCardProps {
 
 export default function ArtCard({ artwork, onClick }: ArtCardProps) {
   const [hidden, setHidden] = useState(false);
-  const museum = MUSEUMS.find(m => m.id === artwork.museum);
 
   if (hidden) return null;
 
@@ -31,12 +29,6 @@ export default function ArtCard({ artwork, onClick }: ArtCardProps) {
           />
         </div>
         <div className="p-3">
-          <span
-            className="inline-block text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full text-white mb-2"
-            style={{ backgroundColor: museum?.color || '#333' }}
-          >
-            {museum?.short || artwork.museum}
-          </span>
           <h3 className="text-sm font-medium leading-tight line-clamp-2 text-[var(--text)]">
             {artwork.title}
           </h3>

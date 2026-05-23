@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Artwork } from '@/lib/types';
 import { MUSEUM_PALETTES, MUSEUMS } from '@/lib/museums';
 import CopyButton from './CopyButton';
@@ -11,8 +12,51 @@ interface LightboxProps {
 }
 
 export default function Lightbox({ artwork, onClose, onStyleClick }: LightboxProps) {
-  const palette = MUSEUM_PALETTES[artwork.museum] || MUSEUM_PALETTES['met'];
+  const fallbackPalette = MUSEUM_PALETTES[artwork.museum] || MUSEUM_PALETTES['met'];
   const museum = MUSEUMS.find(m => m.id === artwork.museum);
+
+  const [extractedColors, setExtractedColors] = useState<string[] | null>(null);
+  const [paletteLoading, setPaletteLoading] = useState(false);
+
+  const displayPalette = extractedColors ?? fallbackPalette;
+
+  useEffect(() => {
+    if (!artwork.image) {
+      setExtractedColors(null);
+      setPaletteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPaletteLoading(true);
+    setExtractedColors(null);
+
+    fetch('/api/extract-palette', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl: artwork.image }),
+    })
+      .then((res) => res.json())
+      .then((data: { colors: string[] | null }) => {
+        if (!cancelled) {
+          setExtractedColors(data.colors ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExtractedColors(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPaletteLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [artwork.image]);
 
   return (
     <div
@@ -68,18 +112,27 @@ export default function Lightbox({ artwork, onClose, onStyleClick }: LightboxPro
             {/* Palette */}
             <div>
               <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)] mb-2">
-                Museum Palette
+                Design Palette
               </h3>
               <div className="flex gap-2">
-                {palette.map((color) => (
-                  <div key={color} className="flex flex-col items-center gap-1">
-                    <div
-                      className="w-8 h-8 rounded-full border border-[var(--border)]"
-                      style={{ backgroundColor: color }}
-                    />
-                    <CopyButton text={color} label="" className="!px-1 !py-0.5 !text-[9px]" />
-                  </div>
-                ))}
+                {paletteLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={`skel-${i}`} className="flex flex-col items-center gap-1">
+                      <div className="w-8 h-8 rounded-full skeleton" />
+                      <div className="skeleton h-3 w-6 rounded" />
+                    </div>
+                  ))
+                ) : (
+                  displayPalette.map((color) => (
+                    <div key={color} className="flex flex-col items-center gap-1">
+                      <div
+                        className="w-8 h-8 rounded-full border border-[var(--border)]"
+                        style={{ backgroundColor: color }}
+                      />
+                      <CopyButton text={color} label="" className="!px-1 !py-0.5 !text-[9px]" />
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

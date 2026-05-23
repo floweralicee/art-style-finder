@@ -10,6 +10,15 @@
   --tag-bg: #f0ede8;
 }
 
+.artchive-wordmark {
+  font-family: var(--font-artchive), Georgia, serif;
+  font-weight: 700;
+  font-size: 3.5rem;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variation-settings: "SOFT" 50, "WONK" 1;
+}
+
 body {
   background: var(--bg);
   color: var(--text);

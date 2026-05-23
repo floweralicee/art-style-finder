@@ -16,7 +16,7 @@ const FILTERS = [
 
 export default function FilterBar({ active, onChange }: FilterBarProps) {
   return (
-    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar justify-end">
       {FILTERS.map((filter) => (
         <button
           key={filter.id}
