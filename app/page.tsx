@@ -27,7 +27,11 @@ export default function Home() {
       const res = await fetch(`/api/artworks?filter=${currentFilter}&page=${pageNum}`);
       const data = await res.json();
       if (append) {
-        setArtworks(prev => [...prev, ...data.artworks]);
+        setArtworks(prev => {
+          const seen = new Set(prev.map(a => a.id));
+          const newArtworks = data.artworks.filter((a: Artwork) => !seen.has(a.id));
+          return [...prev, ...newArtworks];
+        });
       } else {
         setArtworks(data.artworks);
       }

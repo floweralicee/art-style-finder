@@ -28,8 +28,9 @@ async function fetchMet(filter: string, page: number): Promise<Artwork[]> {
     const searchData = await searchRes.json();
     if (!searchData.objectIDs || searchData.objectIDs.length === 0) return [];
 
-    const startIdx = page * 10;
-    const ids = searchData.objectIDs.slice(startIdx, startIdx + 15);
+    const batchSize = 15;
+    const startIdx = page * batchSize;
+    const ids = searchData.objectIDs.slice(startIdx, startIdx + batchSize);
 
     const objects = await Promise.all(
       ids.map(async (id: number) => {
