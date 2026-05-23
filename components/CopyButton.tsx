@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import posthog from 'posthog-js';
 
 interface CopyButtonProps {
   text: string;
@@ -15,6 +16,7 @@ export default function CopyButton({ text, label = 'Copy', className = '' }: Cop
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(text);
+      posthog.capture('color_copied', { value: text });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {

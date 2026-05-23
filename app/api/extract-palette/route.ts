@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { extractPaletteFromImageUrl } from '@/lib/extract-palette-server';
+import { getPostHogClient } from '@/lib/posthog-server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,6 +14,17 @@ export async function POST(request: NextRequest) {
     }
 
     const colors = await extractPaletteFromImageUrl(imageUrl);
+
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId: 'server',
+      event: 'palette_extracted',
+      properties: {
+        success: colors !== null,
+        colors_found: colors?.length ?? 0,
+      },
+    });
+
     return NextResponse.json({ colors });
   } catch {
     return NextResponse.json({ colors: null });

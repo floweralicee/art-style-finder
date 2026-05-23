@@ -3,13 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Artwork } from '@/lib/types';
 import { MUSEUM_PALETTES } from '@/lib/museums';
-import { comparePalettes } from '@/lib/palette-utils';
+import { matchWebsiteToArtwork, getSignatureFamilies } from '@/lib/palette-utils';
 import ArtCard from '@/components/ArtCard';
 import Lightbox from '@/components/Lightbox';
 import StylePanel, { WebsiteMatchData } from '@/components/StylePanel';
+import MatchResultModal from '@/components/MatchResultModal';
 import FilterBar from '@/components/FilterBar';
 import MuseumTicker from '@/components/MuseumTicker';
 import WebsiteMatchModal from '@/components/WebsiteMatchModal';
+import posthog from 'posthog-js';
 
 async function extractArtworkPalette(imageUrl: string): Promise<string[] | null> {
   const res = await fetch('/api/extract-palette', {
@@ -19,6 +21,41 @@ async function extractArtworkPalette(imageUrl: string): Promise<string[] | null>
   });
   const data = await res.json();
   return data.colors ?? null;
+}
+
+const MATCH_CANDIDATE_TARGET = 100;
+const PALETTE_BATCH_SIZE = 10;
+
+type ScoredMatch = {
+  artwork: Artwork;
+  score: number;
+  suggestion: string;
+};
+
+async function gatherMatchCandidates(
+  filter: string,
+  existing: Artwork[],
+  targetCount = MATCH_CANDIDATE_TARGET
+): Promise<Artwork[]> {
+  const byId = new Map<string, Artwork>();
+  for (const artwork of existing) {
+    byId.set(artwork.id, artwork);
+  }
+
+  let pageNum = 0;
+  while (byId.size < targetCount && pageNum < 15) {
+    const res = await fetch(`/api/artworks?filter=${filter}&page=${pageNum}`);
+    const data = await res.json();
+    const batch: Artwork[] = data.artworks ?? [];
+    if (batch.length === 0) break;
+
+    for (const artwork of batch) {
+      byId.set(artwork.id, artwork);
+    }
+    pageNum += 1;
+  }
+
+  return [...byId.values()].slice(0, targetCount);
 }
 
 export default function Home() {
@@ -40,6 +77,7 @@ export default function Home() {
   const paletteCacheRef = useRef<Map<string, string[]>>(new Map());
   const websiteColorsCacheRef = useRef<{ url: string; colors: string[] } | null>(null);
   const matchCycleIndexRef = useRef(-1);
+  const matchCandidatesCacheRef = useRef<{ url: string; candidates: ScoredMatch[] } | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
 
@@ -117,10 +155,12 @@ export default function Home() {
   }, [filter, fetchArtworks]);
 
   const handleFilterChange = (newFilter: string) => {
+    posthog.capture('filter_changed', { filter: newFilter, previous_filter: filter });
     setFilter(newFilter);
     setPage(0);
     setArtworks([]);
     matchCycleIndexRef.current = -1;
+    matchCandidatesCacheRef.current = null;
   };
 
   const handleArtworkClick = (artwork: Artwork) => {
@@ -148,76 +188,133 @@ export default function Home() {
     const url = websiteUrl.trim();
     if (!url || artworks.length === 0) return;
 
+    posthog.capture('website_match_submitted', { website_url: url, filter });
     setWebsiteMatchLoading(true);
     setWebsiteMatchError(null);
 
     try {
-      let websiteColors: string[];
+      await runWebsiteMatch(url);
+      setShowWebsiteModal(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Could not match website';
+      posthog.capture('website_match_failed', { website_url: url, error: errorMessage });
+      posthog.captureException(err);
+      setWebsiteMatchError(errorMessage);
+    } finally {
+      setWebsiteMatchLoading(false);
+    }
+  };
 
-      if (websiteColorsCacheRef.current?.url === url) {
-        websiteColors = websiteColorsCacheRef.current.colors;
-      } else {
-        const res = await fetch('/api/match-website', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ websiteUrl: url }),
-        });
+  const runWebsiteMatch = async (url: string) => {
+    let websiteColors: string[];
 
-        const data = await res.json();
-        if (!res.ok) {
-          setWebsiteMatchError(data.error || 'Could not match website');
-          return;
-        }
+    if (websiteColorsCacheRef.current?.url === url) {
+      websiteColors = websiteColorsCacheRef.current.colors;
+    } else {
+      const res = await fetch('/api/match-website', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: url }),
+      });
 
-        websiteColors = data.websiteColors as string[];
-        websiteColorsCacheRef.current = { url, colors: websiteColors };
-        matchCycleIndexRef.current = -1;
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not match website');
       }
 
-      const candidates = artworks.slice(0, 30);
+      websiteColors = data.websiteColors as string[];
+      websiteColorsCacheRef.current = { url, colors: websiteColors };
+      matchCycleIndexRef.current = -1;
+      matchCandidatesCacheRef.current = null;
+    }
 
-      await Promise.all(
-        candidates.map(async (artwork) => {
-          if (!paletteCacheRef.current.has(artwork.id)) {
-            await getArtworkPalette(artwork);
-          }
-        })
-      );
+    let scoredMatches = matchCandidatesCacheRef.current?.url === url
+      ? matchCandidatesCacheRef.current.candidates
+      : null;
 
-      const scored = candidates
+    if (!scoredMatches) {
+      const candidates = await gatherMatchCandidates(filter, artworks);
+
+      for (let i = 0; i < candidates.length; i += PALETTE_BATCH_SIZE) {
+        const batch = candidates.slice(i, i + PALETTE_BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (artwork) => {
+            if (!paletteCacheRef.current.has(artwork.id)) {
+              await getArtworkPalette(artwork);
+            }
+          })
+        );
+      }
+
+      scoredMatches = candidates
         .map((artwork) => {
           const artworkColors = paletteCacheRef.current.get(artwork.id)
             ?? MUSEUM_PALETTES[artwork.museum]
             ?? MUSEUM_PALETTES.met;
-          const { score, suggestion } = comparePalettes(artworkColors, websiteColors);
-          return { artwork, score, suggestion };
+          const result = matchWebsiteToArtwork(artworkColors, websiteColors);
+          return {
+            artwork,
+            score: result.score,
+            suggestion: result.suggestion,
+            passesFilter: result.passesFilter,
+          };
         })
-        .sort((a, b) => b.score - a.score);
+        .filter((entry) => entry.passesFilter)
+        .sort((a, b) => b.score - a.score)
+        .map(({ artwork, score, suggestion }) => ({ artwork, score, suggestion }));
 
-      if (scored.length === 0) return;
+      if (scoredMatches.length === 0) {
+        const signatures = getSignatureFamilies(websiteColors);
+        if (signatures.length === 0) {
+          throw new Error('No matching artworks found for your neutral site palette. Try browsing more works or switching filters.');
+        }
 
-      matchCycleIndexRef.current = (matchCycleIndexRef.current + 1) % scored.length;
-      const pick = scored[matchCycleIndexRef.current];
+        const familyNames = signatures.map((s) => s.label).join(' and ');
+        throw new Error(
+          `No artworks found with your site's ${familyNames} color tones. Try a different filter or rematch after more works load.`
+        );
+      }
 
-      const match: WebsiteMatchData = {
-        score: pick.score,
-        websiteColors,
-        suggestion: pick.suggestion,
-      };
+      matchCandidatesCacheRef.current = { url, candidates: scoredMatches };
+      matchCycleIndexRef.current = -1;
+    }
 
-      setWebsiteMatch(match);
-      setSelectedArtwork(pick.artwork);
-      setStyleMuseum(pick.artwork.museum);
-      setStylePanelArtwork(pick.artwork);
-      setShowWebsiteModal(false);
+    matchCycleIndexRef.current = (matchCycleIndexRef.current + 1) % scoredMatches.length;
+    const pick = scoredMatches[matchCycleIndexRef.current];
+
+    posthog.capture('website_match_completed', {
+      website_url: url,
+      match_score: pick.score,
+      artwork_id: pick.artwork.id,
+      artwork_title: pick.artwork.title,
+      artwork_museum: pick.artwork.museum,
+    });
+    setWebsiteMatch({
+      score: pick.score,
+      websiteColors,
+      suggestion: pick.suggestion,
+    });
+    setStylePanelArtwork(pick.artwork);
+    setStyleMuseum(pick.artwork.museum);
+    setSelectedArtwork(null);
+  };
+
+  const handleRematch = async () => {
+    const url = websiteUrl.trim();
+    if (!url || artworks.length === 0 || !websiteColorsCacheRef.current) return;
+
+    setWebsiteMatchLoading(true);
+    try {
+      await runWebsiteMatch(url);
     } catch {
-      setWebsiteMatchError('Could not match website');
+      // keep current match visible on rematch failure
     } finally {
       setWebsiteMatchLoading(false);
     }
   };
 
   const handleOpenWebsiteModal = () => {
+    posthog.capture('website_match_modal_opened');
     setWebsiteMatchError(null);
     setShowWebsiteModal(true);
   };
@@ -231,12 +328,18 @@ export default function Home() {
     setWebsiteUrl(url);
     if (websiteColorsCacheRef.current?.url !== url.trim()) {
       matchCycleIndexRef.current = -1;
+      matchCandidatesCacheRef.current = null;
     }
   };
 
   const handleCloseStylePanel = () => {
     setStyleMuseum(null);
     setWebsiteMatch(null);
+    setStylePanelArtwork(null);
+  };
+
+  const handleCloseMatchResult = () => {
+    handleCloseStylePanel();
   };
 
   return (
@@ -316,8 +419,8 @@ export default function Home() {
       {/* Museum ticker */}
       <MuseumTicker />
 
-      {/* Lightbox */}
-      {selectedArtwork && (
+      {/* Lightbox — only when not in website match flow */}
+      {selectedArtwork && !websiteMatch && (
         <Lightbox
           artwork={selectedArtwork}
           onClose={() => setSelectedArtwork(null)}
@@ -325,13 +428,23 @@ export default function Home() {
         />
       )}
 
-      {/* Style Panel */}
-      {styleMuseum && (
+      {/* Unified website match result */}
+      {websiteMatch && stylePanelArtwork && (
+        <MatchResultModal
+          artwork={stylePanelArtwork}
+          websiteMatch={websiteMatch}
+          onClose={handleCloseMatchResult}
+          onRematch={handleRematch}
+          rematchLoading={websiteMatchLoading}
+        />
+      )}
+
+      {/* Style Panel — manual lightbox flow only */}
+      {styleMuseum && !websiteMatch && (
         <StylePanel
           museum={styleMuseum}
           artwork={stylePanelArtwork}
           artworkImageUrl={stylePanelArtwork?.image}
-          websiteMatch={websiteMatch}
           onClose={handleCloseStylePanel}
         />
       )}

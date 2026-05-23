@@ -5,6 +5,7 @@ import { MUSEUM_PALETTES, MOVEMENTS, DESIGN_RECS, MUSEUMS } from '@/lib/museums'
 import { deriveDesignRec } from '@/lib/palette-utils';
 import { Artwork } from '@/lib/types';
 import CopyButton from './CopyButton';
+import posthog from 'posthog-js';
 
 export interface WebsiteMatchData {
   score: number;
@@ -155,10 +156,17 @@ export default function StylePanel({
 
     try {
       await navigator.clipboard.writeText(guideText);
+      posthog.capture('design_guide_copied', {
+        museum,
+        artwork_id: artwork?.id,
+        artwork_title: artwork?.title,
+        palette_source: extractedColors ? 'extracted' : 'museum_preset',
+      });
       setGuideCopied(true);
       setTimeout(() => setGuideCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy design guide:', err);
+      posthog.captureException(err);
     }
   };
 

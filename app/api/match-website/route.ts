@@ -2,11 +2,12 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  comparePalettes,
+  matchWebsiteToArtwork,
   extractOgImageUrl,
 } from '@/lib/palette-utils';
 import { extractPaletteFromImageUrl } from '@/lib/extract-palette-server';
 import { extractLandingPageColors } from '@/lib/extract-website-colors-server';
+import { getPostHogClient } from '@/lib/posthog-server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,12 +61,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId: 'server',
+      event: 'website_match_api_called',
+      properties: {
+        website_url: parsedUrl.hostname,
+        color_source: source,
+        colors_found: websiteColors.length,
+        has_artwork_colors: artworkColors.length > 0,
+      },
+    });
+
     if (artworkColors.length > 0) {
-      const { score, suggestion } = comparePalettes(artworkColors, websiteColors);
+      const { score, suggestion, passesFilter } = matchWebsiteToArtwork(artworkColors, websiteColors);
       return NextResponse.json({
         score,
         websiteColors,
-        suggestion,
+        suggestion: passesFilter ? suggestion : 'This artwork does not share your site\'s core color families.',
         source,
       });
     }

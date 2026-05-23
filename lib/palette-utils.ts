@@ -136,6 +136,179 @@ function paletteColorDistance(a: string, b: string): number {
   return hueScore * 0.55 + satScore * 0.2 + lightScore * 0.15 + rgbScore * 0.1;
 }
 
+export const NEUTRAL_SAT_THRESHOLD = 0.12;
+export const HUE_FAMILY_TOLERANCE = 30;
+
+export interface HueSignature {
+  id: string;
+  label: string;
+  hue: number;
+  color: string;
+}
+
+const FAMILY_LABELS: Record<string, string> = {
+  red: 'red',
+  orange: 'orange',
+  yellow: 'yellow',
+  green: 'green',
+  teal: 'teal',
+  blue: 'blue',
+  purple: 'purple',
+};
+
+function hueWithinTolerance(a: number, b: number, tolerance: number): boolean {
+  let diff = Math.abs(a - b);
+  if (diff > 180) diff = 360 - diff;
+  return diff <= tolerance;
+}
+
+function getFamilyId(hue: number, saturation: number): string | null {
+  if (saturation < NEUTRAL_SAT_THRESHOLD) return null;
+  if (hue >= 345 || hue < 20) return 'red';
+  if (hue < 50) return 'orange';
+  if (hue < 75) return 'yellow';
+  if (hue < 165) return 'green';
+  if (hue < 200) return 'teal';
+  if (hue < 265) return 'blue';
+  return 'purple';
+}
+
+function averageLightness(colors: string[]): number {
+  if (colors.length === 0) return 0.5;
+  return colors.reduce((sum, c) => sum + hexToHsl(c)[2], 0) / colors.length;
+}
+
+function averageSaturation(colors: string[]): number {
+  const chromatic = colors.filter((c) => hexToHsl(c)[1] >= NEUTRAL_SAT_THRESHOLD);
+  const pool = chromatic.length > 0 ? chromatic : colors;
+  return pool.reduce((sum, c) => sum + hexToHsl(c)[1], 0) / pool.length;
+}
+
+export function getSignatureFamilies(colors: string[], maxFamilies = 2): HueSignature[] {
+  const familyMap = new Map<string, { hue: number; color: string; weight: number; peakWeight: number }>();
+
+  colors.forEach((color, index) => {
+    const [hue, saturation] = hexToHsl(color);
+    const id = getFamilyId(hue, saturation);
+    if (!id) return;
+
+    const weight = colors.length - index;
+    const existing = familyMap.get(id);
+    if (!existing) {
+      familyMap.set(id, { hue, color, weight, peakWeight: weight });
+      return;
+    }
+
+    existing.weight += weight;
+    if (weight >= existing.peakWeight) {
+      existing.peakWeight = weight;
+      existing.hue = hue;
+      existing.color = color;
+    }
+  });
+
+  return [...familyMap.entries()]
+    .sort((a, b) => b[1].weight - a[1].weight)
+    .slice(0, maxFamilies)
+    .map(([id, { hue, color }]) => ({
+      id,
+      label: FAMILY_LABELS[id] ?? id,
+      hue,
+      color,
+    }));
+}
+
+export function artworkHasRequiredFamilies(
+  artworkColors: string[],
+  signatures: HueSignature[],
+  tolerance = HUE_FAMILY_TOLERANCE
+): boolean {
+  if (signatures.length === 0) return true;
+
+  return signatures.every((signature) =>
+    artworkColors.some((color) => {
+      const [hue, saturation] = hexToHsl(color);
+      if (saturation < 0.08) return false;
+      return hueWithinTolerance(hue, signature.hue, tolerance);
+    })
+  );
+}
+
+function scoreNeutralPaletteMatch(
+  artworkColors: string[],
+  websiteColors: string[]
+): { score: number; suggestion: string } {
+  const webLight = averageLightness(websiteColors);
+  const artLight = averageLightness(artworkColors);
+  const lightDiff = Math.abs(webLight - artLight);
+  const score = Math.max(40, Math.min(100, Math.round(100 - lightDiff * 120)));
+
+  if (lightDiff < 0.15) {
+    return {
+      score,
+      suggestion: 'Both palettes are neutral — matched on similar light and dark balance.',
+    };
+  }
+
+  return {
+    score,
+    suggestion: 'Neutral site palette — this work complements your muted, tone-on-tone layout.',
+  };
+}
+
+export function scoreFamilyMatch(
+  artworkColors: string[],
+  websiteColors: string[],
+  signatures: HueSignature[]
+): { score: number; suggestion: string } {
+  if (signatures.length === 0) {
+    return scoreNeutralPaletteMatch(artworkColors, websiteColors);
+  }
+
+  const webLight = averageLightness(websiteColors);
+  const artLight = averageLightness(artworkColors);
+  const webSat = averageSaturation(websiteColors);
+  const artSat = averageSaturation(artworkColors);
+
+  const lightScore = 1 - Math.min(1, Math.abs(webLight - artLight) / 0.45);
+  const satScore = 1 - Math.min(1, Math.abs(webSat - artSat) / 0.5);
+  const score = Math.max(
+    55,
+    Math.min(100, Math.round(68 + lightScore * 22 + satScore * 10))
+  );
+
+  const familyNames = signatures.map((s) => s.label);
+  const familyText =
+    familyNames.length === 1
+      ? `${familyNames[0]} tones`
+      : `${familyNames.slice(0, -1).join(', ')} and ${familyNames[familyNames.length - 1]} tones`;
+
+  return {
+    score,
+    suggestion: `Shares your ${familyText} — a strong color-family match with this piece.`,
+  };
+}
+
+export function matchWebsiteToArtwork(
+  artworkColors: string[],
+  websiteColors: string[]
+): {
+  score: number;
+  suggestion: string;
+  passesFilter: boolean;
+  signatures: HueSignature[];
+} {
+  const signatures = getSignatureFamilies(websiteColors);
+  const passesFilter = artworkHasRequiredFamilies(artworkColors, signatures);
+
+  if (!passesFilter) {
+    return { score: 0, suggestion: '', passesFilter: false, signatures };
+  }
+
+  const { score, suggestion } = scoreFamilyMatch(artworkColors, websiteColors, signatures);
+  return { score, suggestion, passesFilter: true, signatures };
+}
+
 export function comparePalettes(
   artworkColors: string[],
   websiteColors: string[]

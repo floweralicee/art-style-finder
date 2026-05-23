@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Artwork } from '@/lib/types';
+import posthog from 'posthog-js';
 
 interface ArtCardProps {
   artwork: Artwork;
@@ -16,7 +17,16 @@ export default function ArtCard({ artwork, onClick }: ArtCardProps) {
   return (
     <div
       className="masonry-item cursor-pointer group"
-      onClick={() => onClick(artwork)}
+      onClick={() => {
+        posthog.capture('artwork_clicked', {
+          artwork_id: artwork.id,
+          artwork_title: artwork.title,
+          artwork_artist: artwork.artist,
+          artwork_museum: artwork.museum,
+          artwork_medium: artwork.medium,
+        });
+        onClick(artwork);
+      }}
     >
       <div className="bg-[var(--surface)] rounded-lg overflow-hidden border border-[var(--border)] hover:shadow-lg transition-shadow">
         <div className="relative overflow-hidden">

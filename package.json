@@ -11,6 +11,8 @@
   "dependencies": {
     "next": "16.2.6",
     "node-vibrant": "^4.0.4",
+    "posthog-js": "^1.376.0",
+    "posthog-node": "^5.35.1",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

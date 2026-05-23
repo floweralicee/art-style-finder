@@ -228,6 +228,15 @@ export async function extractLandingPageColors(html: string, baseUrl: string): P
   extractMetaColors(html, counts);
   await extractStylesheetColors(html, baseUrl, counts);
 
-  const colors = pickTopColors(counts, 5);
-  return colors.length > 0 ? colors : [];
+  const ranked = pickTopColors(counts, 12);
+  if (ranked.length === 0) return [];
+
+  const chromatic = ranked.filter((color) => hexToHsl(color)[1] >= 0.12);
+  const neutral = ranked.filter((color) => hexToHsl(color)[1] < 0.12);
+
+  if (chromatic.length >= 2) {
+    return [...chromatic.slice(0, 4), ...neutral.slice(0, 1)].slice(0, 5);
+  }
+
+  return ranked.slice(0, 5);
 }

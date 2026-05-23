@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Artwork } from '@/lib/types';
 import { MUSEUM_PALETTES, MUSEUMS } from '@/lib/museums';
 import CopyButton from './CopyButton';
+import posthog from 'posthog-js';
 
 interface LightboxProps {
   artwork: Artwork;
@@ -149,7 +150,16 @@ export default function Lightbox({ artwork, onClose, onStyleClick }: LightboxPro
 
             {/* Style Finder button */}
             <button
-              onClick={() => onStyleClick(artwork.museum)}
+              onClick={() => {
+                posthog.capture('style_finder_opened', {
+                  artwork_id: artwork.id,
+                  artwork_title: artwork.title,
+                  artwork_artist: artwork.artist,
+                  artwork_museum: artwork.museum,
+                  source: 'lightbox',
+                });
+                onStyleClick(artwork.museum);
+              }}
               className="mt-auto w-full py-3 px-4 bg-[var(--accent)] text-white rounded-lg font-medium hover:opacity-90 transition text-sm"
             >
               ✦ Use This Style →
