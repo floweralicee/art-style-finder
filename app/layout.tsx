@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/opengraph-image",
+        url: "opengraph-image",
         width: 1200,
         height: 630,
         alt: "Artchive — museum gallery preview",
@@ -35,7 +35,11 @@ export const metadata: Metadata = {
     title: "Artchive — Museum masterpieces into your brand's design language",
     description:
       "Find your perfect design identity from 500k+ works across the world's greatest museums.",
-    images: ["/opengraph-image"],
+    images: ["opengraph-image"],
+  },
+  icons: {
+    icon: [{ url: "icon", type: "image/png", sizes: "32x32" }],
+    apple: [{ url: "apple-icon", type: "image/png", sizes: "180x180" }],
   },
 };
 
