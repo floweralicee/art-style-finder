@@ -525,7 +525,7 @@ export default function Home() {
           <div>
             <p className="artchive-wordmark text-[var(--text)] mb-4">Artchive.</p>
             <h1 className="text-2xl font-bold text-[var(--text)] leading-snug mb-2">
-              Find your brand&apos;s matching art piece.
+              build something no AI could ever generate
             </h1>
             <p className="text-sm text-[var(--text-muted)] leading-relaxed">
               Find your perfect design identity from{' '}
