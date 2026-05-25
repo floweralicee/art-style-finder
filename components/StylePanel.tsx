@@ -12,6 +12,8 @@ export interface WebsiteMatchData {
   score: number;
   websiteColors: string[];
   suggestion: string;
+  websiteUrl: string;
+  previewImageUrl: string | null;
 }
 
 interface StylePanelProps {

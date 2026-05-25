@@ -32,7 +32,7 @@ export default function WebsiteMatchModal({
           ✕
         </button>
 
-        <h2 className="text-lg font-semibold text-[var(--text)] pr-8">Find your style</h2>
+        <h2 className="text-lg font-semibold text-[var(--text)] pr-8">Find Your Art</h2>
         <p className="text-sm text-[var(--text-muted)] mt-2 leading-relaxed">
           Paste your website URL and we&apos;ll match it to a museum artwork whose palette fits your brand.
         </p>

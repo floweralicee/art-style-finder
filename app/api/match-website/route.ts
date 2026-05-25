@@ -39,18 +39,16 @@ export async function POST(request: NextRequest) {
 
     const html = await pageRes.text();
     const pageUrl = pageRes.url || parsedUrl.href;
+    const previewImageUrl = extractOgImageUrl(html, pageUrl);
 
     let websiteColors = await extractLandingPageColors(html, pageUrl);
     let source: 'landing-page' | 'og-image' = 'landing-page';
 
-    if (websiteColors.length < 3) {
-      const ogImageUrl = extractOgImageUrl(html, pageUrl);
-      if (ogImageUrl) {
-        const imageColors = await extractPaletteFromImageUrl(ogImageUrl);
-        if (imageColors) {
-          websiteColors = imageColors;
-          source = 'og-image';
-        }
+    if (websiteColors.length < 3 && previewImageUrl) {
+      const imageColors = await extractPaletteFromImageUrl(previewImageUrl);
+      if (imageColors) {
+        websiteColors = imageColors;
+        source = 'og-image';
       }
     }
 
@@ -70,20 +68,27 @@ export async function POST(request: NextRequest) {
         color_source: source,
         colors_found: websiteColors.length,
         has_artwork_colors: artworkColors.length > 0,
+        has_preview_image: Boolean(previewImageUrl),
       },
     });
+
+    const previewPayload = {
+      websiteColors,
+      source,
+      previewImageUrl,
+      websiteUrl: pageUrl,
+    };
 
     if (artworkColors.length > 0) {
       const { score, suggestion, passesFilter } = matchWebsiteToArtwork(artworkColors, websiteColors);
       return NextResponse.json({
+        ...previewPayload,
         score,
-        websiteColors,
         suggestion: passesFilter ? suggestion : 'This artwork does not share your site\'s core color families.',
-        source,
       });
     }
 
-    return NextResponse.json({ websiteColors, source });
+    return NextResponse.json(previewPayload);
   } catch {
     return NextResponse.json({ error: 'Failed to match website' }, { status: 500 });
   }

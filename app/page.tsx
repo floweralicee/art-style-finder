@@ -33,6 +33,11 @@ type ScoredMatch = {
   suggestion: string;
 };
 
+function isSculpture(artwork: Artwork): boolean {
+  const haystack = [artwork.medium, ...artwork.tags].join(' ').toLowerCase();
+  return haystack.includes('sculpt');
+}
+
 async function gatherMatchCandidates(
   filter: string,
   existing: Artwork[],
@@ -40,7 +45,9 @@ async function gatherMatchCandidates(
 ): Promise<Artwork[]> {
   const byId = new Map<string, Artwork>();
   for (const artwork of existing) {
-    byId.set(artwork.id, artwork);
+    if (!isSculpture(artwork)) {
+      byId.set(artwork.id, artwork);
+    }
   }
 
   let pageNum = 0;
@@ -51,7 +58,9 @@ async function gatherMatchCandidates(
     if (batch.length === 0) break;
 
     for (const artwork of batch) {
-      byId.set(artwork.id, artwork);
+      if (!isSculpture(artwork)) {
+        byId.set(artwork.id, artwork);
+      }
     }
     pageNum += 1;
   }
@@ -76,7 +85,12 @@ export default function Home() {
   const headerRef = useRef<HTMLElement>(null);
   const loadingRef = useRef(false);
   const paletteCacheRef = useRef<Map<string, string[]>>(new Map());
-  const websiteColorsCacheRef = useRef<{ url: string; colors: string[] } | null>(null);
+  const websiteColorsCacheRef = useRef<{
+    url: string;
+    colors: string[];
+    previewImageUrl: string | null;
+    websiteUrl: string;
+  } | null>(null);
   const matchCycleIndexRef = useRef(-1);
   const matchCandidatesCacheRef = useRef<{ url: string; candidates: ScoredMatch[] } | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -208,9 +222,13 @@ export default function Home() {
 
   const runWebsiteMatch = async (url: string) => {
     let websiteColors: string[];
+    let previewImageUrl: string | null;
+    let resolvedWebsiteUrl: string;
 
     if (websiteColorsCacheRef.current?.url === url) {
       websiteColors = websiteColorsCacheRef.current.colors;
+      previewImageUrl = websiteColorsCacheRef.current.previewImageUrl;
+      resolvedWebsiteUrl = websiteColorsCacheRef.current.websiteUrl;
     } else {
       const res = await fetch(withBasePath('/api/match-website'), {
         method: 'POST',
@@ -224,7 +242,14 @@ export default function Home() {
       }
 
       websiteColors = data.websiteColors as string[];
-      websiteColorsCacheRef.current = { url, colors: websiteColors };
+      previewImageUrl = (data.previewImageUrl as string | null) ?? null;
+      resolvedWebsiteUrl = (data.websiteUrl as string) || url;
+      websiteColorsCacheRef.current = {
+        url,
+        colors: websiteColors,
+        previewImageUrl,
+        websiteUrl: resolvedWebsiteUrl,
+      };
       matchCycleIndexRef.current = -1;
       matchCandidatesCacheRef.current = null;
     }
@@ -294,6 +319,8 @@ export default function Home() {
       score: pick.score,
       websiteColors,
       suggestion: pick.suggestion,
+      websiteUrl: resolvedWebsiteUrl,
+      previewImageUrl,
     });
     setStylePanelArtwork(pick.artwork);
     setStyleMuseum(pick.artwork.museum);
@@ -361,7 +388,7 @@ export default function Home() {
           <div>
             <p className="artchive-wordmark text-[var(--text)] mb-4">Artchive.</p>
             <h1 className="text-2xl font-bold text-[var(--text)] leading-snug mb-2">
-              Turn museum masterpieces into your brand&apos;s design language.
+              Find your brand&apos;s matching art piece.
             </h1>
             <p className="text-sm text-[var(--text-muted)] leading-relaxed">
               Find your perfect design identity from{' '}
@@ -375,7 +402,7 @@ export default function Home() {
                 disabled={artworks.length === 0}
                 className="shrink-0 px-5 py-2.5 text-sm font-medium bg-[var(--accent)] text-white rounded-full hover:opacity-90 transition disabled:opacity-50"
               >
-                Find your style
+                Match
               </button>
               <FilterBar active={filter} onChange={handleFilterChange} />
             </div>

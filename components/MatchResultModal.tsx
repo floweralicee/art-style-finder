@@ -17,6 +17,101 @@ interface MatchResultModalProps {
   rematchLoading?: boolean;
 }
 
+function getHostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function SitePreview({
+  previewImageUrl,
+  websiteUrl,
+  websiteColors,
+}: {
+  previewImageUrl: string | null;
+  websiteUrl: string;
+  websiteColors: string[];
+}) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const hostname = getHostname(websiteUrl);
+  const showPreview = Boolean(previewImageUrl) && !previewFailed;
+
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [previewImageUrl]);
+
+  return (
+    <div className="flex flex-col gap-3 min-w-0">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+        Your Site
+      </p>
+      <div className="aspect-video rounded-lg bg-[#1a1a1a] overflow-hidden border border-[var(--border)]">
+        {showPreview ? (
+          <img
+            src={previewImageUrl!}
+            alt={`Social preview for ${hostname}`}
+            className="w-full h-full object-cover"
+            onError={() => setPreviewFailed(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-4 text-center">
+            <p className="text-sm font-medium text-[var(--text)]">{hostname}</p>
+            <p className="text-xs text-[var(--text-muted)]">No preview available</p>
+            <div className="flex gap-1.5 flex-wrap justify-center">
+              {websiteColors.slice(0, 5).map((color) => (
+                <div
+                  key={color}
+                  className="w-6 h-6 rounded-full border border-[var(--border)]"
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-[var(--text-muted)] truncate">{hostname}</p>
+    </div>
+  );
+}
+
+function ArtworkPreview({
+  artwork,
+  museumInfo,
+  museum,
+}: {
+  artwork: Artwork;
+  museumInfo: { name: string; color?: string } | undefined;
+  museum: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3 min-w-0">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+        Matched Art
+      </p>
+      <div className="aspect-video rounded-lg bg-[#1a1a1a] overflow-hidden border border-[var(--border)] flex items-center justify-center p-3">
+        <img
+          src={artwork.image}
+          alt={artwork.title}
+          className="max-w-full max-h-full object-contain"
+        />
+      </div>
+      <div>
+        <span
+          className="inline-block text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full text-white mb-1.5"
+          style={{ backgroundColor: museumInfo?.color || '#333' }}
+        >
+          {museumInfo?.name || museum}
+        </span>
+        <h3 className="text-sm font-semibold text-[var(--text)] leading-snug">{artwork.title}</h3>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">{artwork.artist}</p>
+      </div>
+    </div>
+  );
+}
+
 function PaletteSwatches({ colors, label }: { colors: string[]; label: string }) {
   return (
     <div>
@@ -159,80 +254,55 @@ export default function MatchResultModal({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
       <div
-        className="relative flex w-full max-w-6xl max-h-[90vh] bg-[var(--surface)] rounded-xl shadow-2xl overflow-hidden"
+        className="relative flex flex-col w-full max-w-4xl max-h-[90vh] bg-[var(--surface)] rounded-xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Artwork */}
-        <div className="hidden md:flex md:w-[42%] bg-[#1a1a1a] flex-col min-h-0">
-          <div className="flex-1 flex items-center justify-center p-6 min-h-0">
-            <img
-              src={artwork.image}
-              alt={artwork.title}
-              className="max-w-full max-h-full object-contain"
-            />
+        <div className="sticky top-0 bg-[var(--surface)] border-b border-[var(--border)] px-5 py-4 flex items-center justify-between z-10 shrink-0">
+          <div>
+            <h2 className="text-lg font-semibold">✦ Style Finder</h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              Matched to your landing page
+            </p>
           </div>
-          <div className="p-5 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
-            <span
-              className="inline-block text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full text-white mb-2"
-              style={{ backgroundColor: museumInfo?.color || '#333' }}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                posthog.capture('rematch_clicked', {
+                  artwork_id: artwork.id,
+                  artwork_museum: museum,
+                  current_score: websiteMatch.score,
+                });
+                onRematch();
+              }}
+              disabled={rematchLoading}
+              className="px-3 py-1.5 text-xs font-medium rounded-full border border-[var(--border)] text-[var(--text)] hover:bg-[var(--tag-bg)] transition disabled:opacity-50"
             >
-              {museumInfo?.name || museum}
-            </span>
-            <h2 className="text-lg font-semibold text-[var(--text)] leading-snug">{artwork.title}</h2>
-            <p className="text-sm text-[var(--text-muted)] mt-1">{artwork.artist}</p>
-            {artwork.year && (
-              <p className="text-xs text-[var(--text-muted)] mt-1">{artwork.year}</p>
-            )}
+              {rematchLoading ? '…' : '↻ Rematch'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--tag-bg)] transition"
+            >
+              ✕
+            </button>
           </div>
         </div>
 
-        {/* Style content */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div className="sticky top-0 bg-[var(--surface)] border-b border-[var(--border)] px-5 py-4 flex items-center justify-between z-10 shrink-0">
-            <div>
-              <h2 className="text-lg font-semibold">✦ Style Finder</h2>
-              <p className="text-xs text-[var(--text-muted)]">
-                Matched to your landing page
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  posthog.capture('rematch_clicked', {
-                    artwork_id: artwork.id,
-                    artwork_museum: museum,
-                    current_score: websiteMatch.score,
-                  });
-                  onRematch();
-                }}
-                disabled={rematchLoading}
-                className="px-3 py-1.5 text-xs font-medium rounded-full border border-[var(--border)] text-[var(--text)] hover:bg-[var(--tag-bg)] transition disabled:opacity-50"
-              >
-                {rematchLoading ? '…' : '↻ Rematch'}
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--tag-bg)] transition"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-y-auto p-5 flex flex-col gap-5">
-            <div className="md:hidden">
-              <img
-                src={artwork.image}
-                alt={artwork.title}
-                className="w-full max-h-48 object-contain rounded-lg bg-[#1a1a1a] mb-3"
+        <div className="overflow-y-auto p-5 flex flex-col gap-5">
+          <section>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <ArtworkPreview artwork={artwork} museumInfo={museumInfo} museum={museum} />
+              <SitePreview
+                previewImageUrl={websiteMatch.previewImageUrl}
+                websiteUrl={websiteMatch.websiteUrl}
+                websiteColors={websiteMatch.websiteColors}
               />
-              <h2 className="text-base font-semibold">{artwork.title}</h2>
-              <p className="text-sm text-[var(--text-muted)]">{artwork.artist}</p>
             </div>
+          </section>
 
-            <section>
+          <section>
               <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)] mb-3">
                 Website Match
               </h3>
@@ -249,6 +319,21 @@ export default function MatchResultModal({
                   <p className="text-xs text-[var(--text-muted)] mt-2 leading-relaxed">
                     {websiteMatch.suggestion}
                   </p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)] mb-3">
+                Design Suggestions
+              </h3>
+              <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-[var(--text)]">{designRec.h}</h4>
+                    <p className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">{designRec.b}</p>
+                  </div>
+                  <CopyButton text={`${designRec.h}: ${designRec.b}`} className="shrink-0" />
                 </div>
               </div>
             </section>
@@ -298,21 +383,6 @@ export default function MatchResultModal({
               </div>
             </section>
 
-            <section>
-              <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)] mb-3">
-                Design Suggestions
-              </h3>
-              <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--bg)]">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-[var(--text)]">{designRec.h}</h4>
-                    <p className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">{designRec.b}</p>
-                  </div>
-                  <CopyButton text={`${designRec.h}: ${designRec.b}`} className="shrink-0" />
-                </div>
-              </div>
-            </section>
-
             <button
               type="button"
               onClick={handleCopyDesignGuide}
@@ -321,7 +391,6 @@ export default function MatchResultModal({
             >
               {guideCopied ? 'Copied!' : 'Copy Full Design Guide'}
             </button>
-          </div>
         </div>
       </div>
     </div>
