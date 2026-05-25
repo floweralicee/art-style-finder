@@ -14,6 +14,16 @@ import WebsiteMatchModal from '@/components/WebsiteMatchModal';
 import posthog from 'posthog-js';
 import { withBasePath } from '@/lib/api-path';
 
+type CreativeSearchMode = 'text' | 'url' | 'image';
+
+type CreativeSearchMeta = {
+  mode: CreativeSearchMode;
+  colors?: string[];
+  suggestion?: string;
+  weakMatch?: boolean;
+  label: string;
+};
+
 async function extractArtworkPalette(imageUrl: string): Promise<string[] | null> {
   const res = await fetch(withBasePath('/api/extract-palette'), {
     method: 'POST',
@@ -95,6 +105,15 @@ export default function Home() {
   const matchCandidatesCacheRef = useRef<{ url: string; candidates: ScoredMatch[] } | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
+  const [creativeMode, setCreativeMode] = useState<CreativeSearchMode>('text');
+  const [creativeInput, setCreativeInput] = useState('');
+  const [creativeImage, setCreativeImage] = useState<File | null>(null);
+  const [creativeLoading, setCreativeLoading] = useState(false);
+  const [creativeError, setCreativeError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<Artwork[] | null>(null);
+  const [searchMeta, setSearchMeta] = useState<CreativeSearchMeta | null>(null);
+  const creativeFileRef = useRef<HTMLInputElement>(null);
+  const isSearchActive = searchResults !== null;
 
   const fetchArtworks = useCallback(async (pageNum: number, currentFilter: string, append: boolean) => {
     if (loadingRef.current) return;
@@ -147,8 +166,10 @@ export default function Home() {
   const headerOffset = Math.min(scrollY, headerHeight);
   const headerHidden = headerHeight > 0 && scrollY >= headerHeight;
 
-  // Infinite scroll
+  // Infinite scroll — paused while creative search results are shown
   useEffect(() => {
+    if (isSearchActive) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadingRef.current) {
@@ -167,7 +188,7 @@ export default function Home() {
     }
 
     return () => observer.disconnect();
-  }, [filter, fetchArtworks]);
+  }, [filter, fetchArtworks, isSearchActive]);
 
   const handleFilterChange = (newFilter: string) => {
     posthog.capture('filter_changed', { filter: newFilter, previous_filter: filter });
@@ -370,6 +391,119 @@ export default function Home() {
     handleCloseStylePanel();
   };
 
+  const handleCreativeModeChange = (mode: CreativeSearchMode) => {
+    setCreativeMode(mode);
+    setCreativeError(null);
+    if (mode !== 'image') {
+      setCreativeImage(null);
+    }
+  };
+
+  const handleCreativeImageSelect = (file: File | null) => {
+    setCreativeImage(file);
+    setCreativeError(null);
+  };
+
+  const handleCreativeSearch = async () => {
+    setCreativeLoading(true);
+    setCreativeError(null);
+
+    try {
+      if (creativeMode === 'text') {
+        const input = creativeInput.trim();
+        if (!input) {
+          setCreativeError('Describe your vibe to search.');
+          return;
+        }
+
+        posthog.capture('creative_search_submitted', { mode: 'text', input_length: input.length });
+        const res = await fetch(withBasePath('/api/creative-search'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'text', input }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Search failed');
+
+        setSearchResults(data.artworks ?? []);
+        setSearchMeta({
+          mode: 'text',
+          weakMatch: data.weakMatch,
+          label: `Results for “${input}”`,
+        });
+        return;
+      }
+
+      if (creativeMode === 'url') {
+        const url = creativeInput.trim();
+        if (!url) {
+          setCreativeError('Paste a website URL to search.');
+          return;
+        }
+
+        posthog.capture('creative_search_submitted', { mode: 'url', website_url: url });
+        const res = await fetch(withBasePath('/api/match-website'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Website match failed');
+
+        setSearchResults(data.artworks ?? []);
+        setSearchMeta({
+          mode: 'url',
+          colors: data.websiteColors,
+          suggestion: data.suggestion,
+          weakMatch: data.weakMatch,
+          label: 'Your site palette',
+        });
+        return;
+      }
+
+      if (!creativeImage) {
+        setCreativeError('Drop or choose an image to search.');
+        return;
+      }
+
+      posthog.capture('creative_search_submitted', {
+        mode: 'image',
+        file_type: creativeImage.type,
+        file_size: creativeImage.size,
+      });
+      const formData = new FormData();
+      formData.append('image', creativeImage);
+      const res = await fetch(withBasePath('/api/match-image'), {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Image match failed');
+
+      setSearchResults(data.artworks ?? []);
+      setSearchMeta({
+        mode: 'image',
+        colors: data.imageColors,
+        weakMatch: data.weakMatch,
+        label: 'Your image palette',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Search failed';
+      setCreativeError(message);
+      posthog.captureException(err);
+    } finally {
+      setCreativeLoading(false);
+    }
+  };
+
+  const handleBackToGallery = () => {
+    setSearchResults(null);
+    setSearchMeta(null);
+    setCreativeError(null);
+  };
+
+  const displayedArtworks = searchResults ?? artworks;
+
   return (
     <div className="min-h-screen pb-12">
       <div style={{ height: headerHeight || undefined }} aria-hidden={headerHidden} />
@@ -411,9 +545,54 @@ export default function Home() {
       </header>
 
       {/* Gallery */}
-      <main className="max-w-[1400px] mx-auto px-4 pb-6">
+      <main className="max-w-[1400px] mx-auto px-4 pb-28">
+        {isSearchActive && (
+          <div className="mb-6 flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={handleBackToGallery}
+              className="self-start px-4 py-2 text-sm font-medium rounded-full border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--tag-bg)] transition"
+            >
+              ← Back to full gallery
+            </button>
+
+            {searchMeta && (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-[var(--text)]">{searchMeta.label}</p>
+                  {searchMeta.weakMatch && (
+                    <p className="text-xs text-[var(--text-muted)]">
+                      No strong matches — showing closest artworks
+                    </p>
+                  )}
+                </div>
+
+                {searchMeta.colors && searchMeta.colors.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-1.5 flex-wrap">
+                      {searchMeta.colors.map((color) => (
+                        <div
+                          key={color}
+                          className="w-7 h-7 rounded-full border border-[var(--border)]"
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                    {searchMeta.suggestion && (
+                      <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                        {searchMeta.suggestion}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="masonry-grid">
-          {artworks.map((artwork) => (
+          {displayedArtworks.map((artwork) => (
             <ArtCard
               key={artwork.id}
               artwork={artwork}
@@ -423,7 +602,7 @@ export default function Home() {
         </div>
 
         {/* Loading skeletons */}
-        {loading && (
+        {loading && !isSearchActive && (
           <div className="masonry-grid mt-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={`skel-${i}`} className="masonry-item">
@@ -441,8 +620,92 @@ export default function Home() {
         )}
 
         {/* Infinite scroll trigger */}
-        <div ref={observerRef} className="h-10" />
+        {!isSearchActive && <div ref={observerRef} className="h-10" />}
       </main>
+
+      {/* Creative search bar */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[min(720px,calc(100vw-2rem))]">
+        <div
+          className="rounded-full border border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md shadow-lg px-3 py-2 flex items-center gap-2"
+          onDragOver={(e) => {
+            if (creativeMode === 'image') e.preventDefault();
+          }}
+          onDrop={(e) => {
+            if (creativeMode !== 'image') return;
+            e.preventDefault();
+            const file = e.dataTransfer.files?.[0];
+            if (file?.type.startsWith('image/')) {
+              handleCreativeImageSelect(file);
+            }
+          }}
+        >
+          <div className="flex items-center gap-1 shrink-0">
+            {(['text', 'url', 'image'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => handleCreativeModeChange(mode)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition ${
+                  creativeMode === mode
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--tag-bg)]'
+                }`}
+              >
+                {mode === 'text' ? 'Text' : mode === 'url' ? 'URL' : 'Image'}
+              </button>
+            ))}
+          </div>
+
+          {creativeMode === 'image' ? (
+            <button
+              type="button"
+              onClick={() => creativeFileRef.current?.click()}
+              className="flex-1 min-w-0 text-left px-3 py-2 text-sm text-[var(--text-muted)] truncate hover:text-[var(--text)] transition"
+            >
+              {creativeImage ? creativeImage.name : 'Drop an image or click to upload…'}
+            </button>
+          ) : (
+            <input
+              type={creativeMode === 'url' ? 'url' : 'text'}
+              value={creativeInput}
+              onChange={(e) => {
+                setCreativeInput(e.target.value);
+                setCreativeError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreativeSearch();
+              }}
+              placeholder={
+                creativeMode === 'url'
+                  ? 'Paste a website URL…'
+                  : 'Describe your vibe, paste a URL, or drop an image...'
+              }
+              className="flex-1 min-w-0 bg-transparent px-2 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none"
+            />
+          )}
+
+          <input
+            ref={creativeFileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleCreativeImageSelect(e.target.files?.[0] ?? null)}
+          />
+
+          <button
+            type="button"
+            onClick={handleCreativeSearch}
+            disabled={creativeLoading}
+            className="shrink-0 px-4 py-2 text-sm font-medium rounded-full bg-[var(--accent)] text-white hover:opacity-90 transition disabled:opacity-50"
+          >
+            {creativeLoading ? '…' : 'Search'}
+          </button>
+        </div>
+
+        {creativeError && (
+          <p className="mt-2 text-center text-xs text-red-600">{creativeError}</p>
+        )}
+      </div>
 
       {/* Museum ticker */}
       <MuseumTicker />

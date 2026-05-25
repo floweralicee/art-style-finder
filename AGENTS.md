@@ -56,21 +56,91 @@ Once real colors are extracted, improve the copy dynamically:
 - Pick one of ~6 short copy templates based on the classification (e.g. "Warm & Vivid → Expressive, Bold", "Cool & Muted → Editorial, Calm")
 - Keep the museum movement label ("Dutch Golden Age", "Renaissance") from the preset — do not try to classify that from the image
 
-### 5. New feature — website URL matcher in StylePanel
+### 5. Creative Search Bar — "Find Your Inspiration"
 
-Add a small input section at the bottom of StylePanel:
+This is the primary discovery feature. A floating search bar at the bottom of the main gallery page (`app/page.tsx`) that accepts three input types and finds the most relevant artworks from the archive.
 
-```
-[ Paste your website URL ] [ Match ]
-```
+#### UI
+- Pill-shaped floating bar fixed at the bottom center of the page
+- Placeholder text: "Describe your vibe, paste a URL, or drop an image..."
+- Three mode buttons on the left of the input: **Text** | **URL** | **Image**
+- A single **Search** button on the right
+- Subtle, minimal — does not obstruct the gallery
 
-On submit:
-- Call a new route `app/api/match-website/route.ts`
-- That route fetches the page, extracts the OG image URL from `<meta property="og:image">`, then calls the palette extraction logic on that OG image
-- Compare the website palette to the artwork palette using Euclidean distance in RGB space (average distance across all 5 color pairs after sorting both by luminance)
-- Return `{ score: number (0–100), websiteColors: string[], suggestion: string }`
-- `suggestion` is a one-liner: e.g. "Your site's cool tones complement this work's muted blues well." or "High contrast — this piece would anchor your minimal layout."
-- Display the website palette swatches side-by-side with the artwork palette in the panel, with the score and suggestion below
+#### Mode 1 — Text description
+User types a creative intent: "watercolor botanical soft Japanese" or "dark moody chiaroscuro portrait" or just "melancholy"
+
+Flow:
+- Send to `POST /api/creative-search` with `{ type: "text", input: "..." }`
+- Server translates the description into 3–5 museum search keywords using a hardcoded mood-to-keyword map in `lib/moodKeywords.ts`
+- Mood map examples:
+  - "melancholy" → ["nocturne", "shadow", "solitude", "dark", "figure"]
+  - "minimal" → ["sketch", "line", "simple", "geometric", "white"]
+  - "warm" → ["golden", "sunlight", "amber", "harvest", "fire"]
+  - "watercolor" → ["watercolor", "wash", "botanical", "delicate", "ink"]
+  - "electric" → ["vivid", "bold", "colour", "abstract", "dynamic"]
+- If no mood map match, fall back to passing the raw text directly as a museum API keyword search
+- Hit all three museum APIs with the translated keywords
+- Return top 20 results ranked by palette warmth/coolness match to the described mood
+- Replace the current gallery grid with these results
+
+#### Mode 2 — Website URL
+User pastes their site URL: "https://mysite.com"
+
+Flow:
+- Send to `POST /api/match-website` with `{ url: "..." }`
+- Server fetches the page, extracts OG image from `<meta property="og:image">`
+- Extracts palette from OG image using `node-vibrant`
+- Searches museum APIs for artworks and scores them by Euclidean RGB distance to the site palette
+- Returns top 20 closest matching artworks + `{ websiteColors: string[], suggestion: string }`
+- Replace gallery grid with results
+- Show a small "Your site palette" swatch row above the results with the suggestion
+
+#### Mode 3 — Image upload
+User drops or selects an image file
+
+Flow:
+- Send to `POST /api/match-image` with the image as `multipart/form-data`
+- Server extracts palette from the uploaded image using `node-vibrant`
+- Searches museum APIs and scores artworks by palette distance (same RGB math as Mode 2)
+- Returns top 20 closest matching artworks
+- Replace gallery grid with results
+- Show "Your image palette" swatch row above the results
+
+#### Shared result behaviour (all three modes)
+- Show a "Back to full gallery" button above results to reset
+- Each result card is identical to the existing gallery cards — click opens the same lightbox
+- Results are not paginated — show all 20 at once
+- If fewer than 5 results found, show a "No strong matches — showing closest artworks" message
+
+### 6. New API routes needed
+
+#### `app/api/creative-search/route.ts`
+- POST `{ type: "text", input: string }`
+- Loads `lib/moodKeywords.ts` map, translates input to keywords
+- Queries Met, Rijks, Chicago with those keywords
+- Returns `{ artworks: Artwork[] }`
+- Add `export const runtime = 'nodejs'` at top
+
+#### `app/api/match-website/route.ts`
+- POST `{ url: string }`
+- Fetches page HTML server-side, parses OG image tag
+- Extracts palette from OG image via `node-vibrant`
+- Queries all three museum APIs, scores by palette distance
+- Returns `{ artworks: Artwork[], websiteColors: string[], suggestion: string }`
+- Add `export const runtime = 'nodejs'` at top
+
+#### `app/api/match-image/route.ts`
+- POST multipart/form-data with image file
+- Extracts palette from uploaded image via `node-vibrant`
+- Queries all three museum APIs, scores by palette distance
+- Returns `{ artworks: Artwork[], imageColors: string[] }`
+- Add `export const runtime = 'nodejs'` at top
+
+### 7. New lib file — `lib/moodKeywords.ts`
+
+Hardcoded map of ~50 mood/style words to museum search keyword arrays. Start with at least:
+- melancholy, minimal, warm, cool, electric, dark, light, bold, soft, geometric, floral, portrait, landscape, abstract, watercolor, ink, gold, blue, red, monochrome, vintage, modern, romantic, dramatic, peaceful, chaotic, earthy, pastel, vivid, gothic
 
 ## Constraints
 
@@ -80,11 +150,12 @@ On submit:
 - Keep all new API routes under `app/api/`
 - All image fetching must happen server-side (API routes), never from the browser directly, to avoid CORS
 - If `node-vibrant` causes build issues with the Next.js edge runtime, move the route to use `runtime = 'nodejs'` at the top of the file
+- The floating search bar must not break the existing infinite scroll gallery behaviour — results replace the grid temporarily, "Back to full gallery" restores it
 
 ## Files to read before changing anything
 
 - `lib/museums.ts`
 - The `StylePanel` component file (wherever it lives)
-- `app/page.tsx` — specifically the Lightbox open handler and the StylePanel render
+- `app/page.tsx` — specifically the Lightbox open handler, the StylePanel render, and the gallery grid state
 - `app/api/artworks/route.ts` — to understand the artwork object shape (especially image URL field names per museum)
 <!-- END:artchive-style-finder -->

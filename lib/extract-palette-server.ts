@@ -38,16 +38,23 @@ export function mapPaletteToColors(palette: Palette): string[] {
   return colors.slice(0, 5);
 }
 
+export async function extractPaletteFromBuffer(buffer: Buffer): Promise<string[] | null> {
+  try {
+    const palette = await Vibrant.from(buffer).getPalette();
+    const colors = mapPaletteToColors(palette);
+    return colors.length > 0 ? colors : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function extractPaletteFromImageUrl(imageUrl: string): Promise<string[] | null> {
   try {
     const response = await fetch(imageUrl, { headers: FETCH_HEADERS });
     if (!response.ok) return null;
 
     const buffer = Buffer.from(await response.arrayBuffer());
-    const palette = await Vibrant.from(buffer).getPalette();
-    const colors = mapPaletteToColors(palette);
-
-    return colors.length > 0 ? colors : null;
+    return extractPaletteFromBuffer(buffer);
   } catch {
     return null;
   }

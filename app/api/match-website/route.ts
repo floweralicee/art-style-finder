@@ -7,18 +7,27 @@ import {
 } from '@/lib/palette-utils';
 import { extractPaletteFromImageUrl } from '@/lib/extract-palette-server';
 import { extractLandingPageColors } from '@/lib/extract-website-colors-server';
+import {
+  gatherPaletteMatchCandidates,
+  paletteSuggestion,
+  rankArtworksByPaletteDistance,
+} from '@/lib/museum-search';
 import { getPostHogClient } from '@/lib/posthog-server';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const websiteUrl = typeof body.websiteUrl === 'string' ? body.websiteUrl.trim() : '';
+    const rawUrl =
+      (typeof body.url === 'string' ? body.url : '') ||
+      (typeof body.websiteUrl === 'string' ? body.websiteUrl : '');
+    const websiteUrl = rawUrl.trim();
+    const includeArtworks = Boolean(body.url) || body.includeArtworks === true;
     const artworkColors = Array.isArray(body.artworkColors)
       ? body.artworkColors.filter((c: unknown): c is string => typeof c === 'string')
       : [];
 
     if (!websiteUrl) {
-      return NextResponse.json({ error: 'websiteUrl is required' }, { status: 400 });
+      return NextResponse.json({ error: 'url is required' }, { status: 400 });
     }
 
     let parsedUrl: URL;
@@ -85,6 +94,19 @@ export async function POST(request: NextRequest) {
         ...previewPayload,
         score,
         suggestion: passesFilter ? suggestion : 'This artwork does not share your site\'s core color families.',
+      });
+    }
+
+    if (includeArtworks) {
+      const candidates = await gatherPaletteMatchCandidates();
+      const artworks = await rankArtworksByPaletteDistance(candidates, websiteColors, 20);
+      const suggestion = paletteSuggestion(websiteColors);
+
+      return NextResponse.json({
+        ...previewPayload,
+        artworks,
+        suggestion,
+        weakMatch: artworks.length < 5,
       });
     }
 
