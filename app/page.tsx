@@ -509,12 +509,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen pb-12">
-      <div style={{ height: headerHeight || undefined }} aria-hidden={headerHidden} />
+      <div
+        style={{ height: headerHeight ? headerHeight + 48 : undefined }}
+        aria-hidden={headerHidden}
+      />
 
       {/* Header */}
       <header
         ref={headerRef}
-        className="fixed top-0 left-0 right-0 bg-[var(--bg)] z-30"
+        className="fixed top-12 left-0 right-0 bg-[var(--bg)] z-30"
         style={{
           transform: `translateY(-${headerOffset}px)`,
           opacity: headerHeight > 0 ? 1 - headerOffset / headerHeight : 1,
@@ -525,10 +528,10 @@ export default function Home() {
           <div>
             <p className="artchive-wordmark text-[var(--text)] mb-4">Artchive.</p>
             <h1 className="text-2xl font-bold text-[var(--text)] leading-snug mb-2">
-              build something no AI could ever generate
+              build something AI can not generate.
             </h1>
             <p className="text-sm text-[var(--text-muted)] leading-relaxed">
-              Find your perfect design identity from{' '}
+              Find inspiration from{' '}
               <span className="font-bold text-[var(--text)]">500k+ works</span>
               {' '}across the world&apos;s greatest museums.
             </p>
